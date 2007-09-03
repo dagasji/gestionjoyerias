@@ -1,0 +1,101 @@
+@CHARSET "ISO-8859-1";
+
+#container {
+	width: 900px;
+	margin: 0px auto;
+	text-align: left;
+	background-color: #fff;
+	color: #666;
+	border: 10px solid #ccc;
+}
+
+#header {
+	background-color: #003399;
+	color: #fff;
+	padding: 2px 15px 2px 15px;
+	font-family: "Trebuchet MS", Times, serif;
+}
+
+#sidebar {
+	width: 200px;
+	padding: 10px;
+	float: left;
+	background-color: #eee;
+	border-right: 1px solid #ccc;
+	border-bottom: 1px solid #ccc;
+}
+
+#sidebar a{
+	text-align: center;
+	font-size: 14px;
+	color: #000000;
+	font-weight:bold;
+	text-decoration:none;
+	}
+	
+#sidebar a:hover{
+	color:red;
+	
+	}
+
+#maincalendario {
+	padding: 10px;
+	margin-left: 290px;
+}
+
+
+
+#main {
+	padding: 10px;
+	margin-left: 200px;
+	<!--height: 260px-->
+}
+
+#footer {
+	clear: both;
+	background-color: #003399;
+	color: #ccc;
+	padding: 1px;
+	text-align: center;
+}
+
+body {
+	background-color: #666;
+	text-align: center;
+	margin: 0px;
+	font: 10pt Arial, Helvetica, sans-serif;
+}
+
+/* estilos morralla */
+#header h2 {
+	font-style: italic;
+	color: #ccc;
+}
+
+#footer a {
+	color: #fff;
+}
+
+table
+{
+
+font-size: 20px;
+border-spacing:length;
+text-align: right;
+}
+table.normal
+{
+
+font-size: 12px;
+border-spacing:length;
+text-align: right;
+}
+
+table.mediano
+{
+
+font-size: 15px;
+border-spacing:length;
+text-align: right;
+}
+
