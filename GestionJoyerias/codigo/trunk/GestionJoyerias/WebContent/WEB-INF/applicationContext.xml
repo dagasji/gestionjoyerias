@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE beans PUBLIC "-//SPRING//DTD BEAN 2.0//EN" "http://www.springframework.org/dtd/spring-beans-2.0.dtd">
+
+<beans>
+
+	<bean id="handlerJoyeria" class="es.aguamarina.gestionjoyeria.persistence.dao.HandlerJoyerias">
+		<property name="ds" ref="ds"/>
+	</bean>
+	
+	<bean id="facturasDao" class="es.aguamarina.gestionjoyeria.persistence.dao.FacturasDao">
+		<property name="ds" ref="ds"/>
+	</bean>
+	
+	<bean id="handlerReparaciones" class="es.aguamarina.gestionjoyeria.persistence.dao.HandlerReparaciones">
+		<property name="ds" ref="ds"/>
+	</bean>	
+
+	<bean id="ds" destroy-method="close" class="org.apache.commons.dbcp.BasicDataSource">
+		<property name="driverClassName" value="com.mysql.jdbc.Driver"/>
+		<property name="url" value="jdbc:mysql://localhost/gestionjoyerias"/>
+		<property name="username" value="usuariojoyeria"/>
+		<property name="password" value="123"/>
+		<property name="maxActive" value="10"/>
+	</bean>
+</beans>
