@@ -1,0 +1,845 @@
+package es.aguamarina.gestionjoyeria.handler;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
+import java.sql.Date;
+
+import org.apache.log4j.Logger;
+
+import es.aguamarina.gestionjoyeria.config.Constants;
+import es.aguamarina.gestionjoyeria.exception.DataBaseException;
+import es.aguamarina.gestionjoyeria.structura.Factura;
+import es.aguamarina.gestionjoyeria.structura.ReparacionCriteria;
+import es.aguamarina.gestionjoyeria.structura.ReparacionVO;
+
+
+
+public class HandlerReparaciones {
+	private Connection conexion;
+	private PreparedStatement ps;
+	private ResultSet rs;
+	private final String URL = "jdbc:mysql://localhost/gestionjoyerias";
+	private final String USER = "usuariojoyeria";
+	private final String PASSWORD = "123";
+	private Logger log;
+	
+	
+	private final String SQL_ULTIMO_CODIGO = "Select max(COD_REPARACION) as codigo from reparaciones";
+	
+	private final String SQL_ELIMINAR_REPARACION = "delete from reparaciones where COD_REPARACION = ?";
+	
+	public HandlerReparaciones() throws DataBaseException
+	{
+		log = Logger.getLogger(Constants.LOGGER_GESTION_JOYERIAS);
+		try {
+			Class.forName("com.mysql.jdbc.Driver");
+		} catch (ClassNotFoundException e) {
+			throw new DataBaseException();
+		}
+	}
+	
+	/**
+	 * Metodo que devuelve el listado de reparaciones para una joyeria determinada.
+	 * @param codJoyeria 
+	 * @return List Listado de Reparaciones
+	 * @throws DataBaseException
+	 */
+	public List listadoReparaciones(Integer codJoyeria, String estado) throws DataBaseException
+	{
+
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			StringBuffer sql = new StringBuffer();
+			sql.append("SELECT COD_REPARACION, COD_SOBRE, REPARACION, PRESUPUESTO, PRECIO, NOMBRE_CLIENTE, FECHA_ENTRADA, FECHA_SALIDA, REPARADO, FACTURADO, ARTICULO, facturas.FECHA_FACTURACION, facturas.COD_FACTURA FROM reparaciones left join facturas on reparaciones.COD_FACTURA_FK = facturas.COD_FACTURA WHERE COD_JOYERIA_FK = ?");
+			
+			if(estado.equals(Constants.ESTADO_PRESUPUESTO))
+				sql.append(" AND PRESUPUESTO = 1");
+			if(estado.equals(Constants.ESTADO_SINREPARAR))
+				sql.append(" AND (REPARADO = 0 OR REPARADO is null) AND (PRESUPUESTO = 0 OR PRESUPUESTO is null)");
+			else if(estado.equals(Constants.ESTADO_SINENTREGAR))
+				sql.append(" AND REPARADO = 1 AND (ENTREGADO =0 OR ENTREGADO is null)");
+			else if(estado.equals(Constants.ESTADO_SINFACTURAR))
+				sql.append(" AND ENTREGADO = 1 AND (FACTURADO =0 OR FACTURADO is null)");
+			else if(estado.equals(Constants.ESTADO_FACTURADOS))
+				sql.append(" AND FACTURADO = 1");
+			ps = conexion.prepareStatement(sql.toString());
+			ps.setInt(1, codJoyeria);
+			rs=	ps.executeQuery();
+						
+			if(rs != null)
+			{
+				List<ReparacionVO> listaReparaciones = new ArrayList<ReparacionVO>();
+				while(rs.next()){
+					ReparacionVO reparacion = new ReparacionVO();
+					reparacion.setCodReparacion(rs.getInt("COD_REPARACION"));
+					reparacion.setCodSobre(rs.getString("COD_SOBRE"));
+					reparacion.setReparacion(rs.getString("REPARACION"));
+					reparacion.setPrecio(rs.getFloat("PRECIO"));
+					reparacion.setNombreCliente(rs.getString("NOMBRE_CLIENTE"));
+					reparacion.setFechaEntrada(rs.getDate("FECHA_ENTRADA"));
+					reparacion.setFechaSalida(rs.getDate("FECHA_SALIDA"));
+					reparacion.setReparado(rs.getBoolean("REPARADO"));
+					reparacion.setFacturado(rs.getBoolean("FACTURADO"));
+					reparacion.setArticulo(rs.getString("ARTICULO"));
+					reparacion.setPresupuesto(rs.getBoolean("PRESUPUESTO"));
+					
+					Factura factura = new Factura();
+					factura.setCodFactura(rs.getInt("COD_FACTURA"));					
+					factura.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setFactura(factura);				
+					
+					listaReparaciones.add(reparacion);
+					
+				}
+				if(listaReparaciones.size() == 0)
+					return null;
+				else
+					return listaReparaciones;
+				
+					
+			}else{
+				return null;
+			}
+			
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al acceder a los datos de las reparaciones");
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		
+	}
+	
+	
+	/**
+	 * Metodo que devuelve el primer codigo disponible de reparaci�n.
+	 * @return Integer Primer codigo disponible.
+	 * @throws DataBaseException
+	 */
+	public Integer ultimoCodigo() throws DataBaseException{
+		try {
+			Integer codigoMax;
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			ps = conexion.prepareStatement(this.SQL_ULTIMO_CODIGO);
+			rs = ps.executeQuery();
+			
+			if(rs.next())
+				codigoMax = rs.getInt("codigo") + 1;
+			else
+				codigoMax = 1;
+			return codigoMax; 
+			
+		} catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al acceder a los datos de las reparaciones");
+		}
+		
+		finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}		
+	}
+	
+	
+	/**
+	 * 
+	 * @param joyeria
+	 * @throws DataBaseException
+	 */
+	public void insertarReparacion(ReparacionVO reparacion) throws DataBaseException
+	{
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+						
+			StringBuffer sql = new StringBuffer();
+				
+			sql.append("insert into reparaciones (");
+			sql.append("COD_REPARACION,COD_SOBRE, COD_JOYERIA_FK");
+			
+			int i = 3;
+			
+			if (reparacion.getReparacion() != null){
+				sql.append(",REPARACION");
+				i++;
+			}
+			if (reparacion.getArticulo() != null){
+				sql.append(",ARTICULO");
+				i++;
+			}
+			if (reparacion.getFechaEntrada() != null){
+				sql.append(",FECHA_ENTRADA");
+				i++;
+			}
+			if (reparacion.getFechaSalida() != null){
+				sql.append(",FECHA_SALIDA");
+				i++;
+			}
+			if (reparacion.getNombreCliente() != null){
+				sql.append(",NOMBRE_CLIENTE");
+				i++;
+			}
+			if (reparacion.getPrecio() != null){
+				sql.append(",PRECIO");
+				i++;
+			}
+			if (reparacion.isReparado() != null){
+				sql.append(",REPARADO");
+				i++;
+			}
+			if (reparacion.isFacturado() != null){
+				sql.append(",FACTURADO");
+				i++;
+			}
+			if (reparacion.isEntregado() != null){
+				sql.append(",ENTREGADO");
+				i++;
+			}
+						
+			sql.append(") values (?");
+			
+			for(int x=1; x<i; x++)
+				sql.append(",?");
+			
+			sql.append(")");
+			
+			
+			ps = conexion.prepareStatement(sql.toString());
+			
+			ps.setInt(1, reparacion.getCodReparacion());
+			ps.setString(2, reparacion.getCodSobre());
+			ps.setInt(3, reparacion.getJoyeria().getCodJoyeria());
+			
+			i = 3;
+			
+			if (reparacion.getReparacion() != null)
+				ps.setString(++i, reparacion.getReparacion());
+			if (reparacion.getArticulo() != null)
+				ps.setString(++i, reparacion.getArticulo());
+			if (reparacion.getFechaEntrada() != null)
+				ps.setDate(++i, new Date(reparacion.getFechaEntrada().getTime()));
+			if (reparacion.getFechaSalida() != null)
+				ps.setDate(++i, new Date(reparacion.getFechaSalida().getTime()));
+			if (reparacion.getNombreCliente() != null)
+				ps.setString(++i, reparacion.getNombreCliente());
+			if (reparacion.getPrecio() != null)
+				ps.setFloat(++i, reparacion.getPrecio());
+			if (reparacion.isReparado() != null)
+				ps.setBoolean(++i, reparacion.isReparado());
+			if (reparacion.isFacturado() != null)
+				ps.setBoolean(++i, reparacion.isFacturado());
+			if (reparacion.isEntregado() != null)
+				ps.setBoolean(++i, reparacion.isEntregado());
+						
+			ps.execute();
+			
+			
+
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al insertar los datos de la nueva reparacion");
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		
+	}
+	
+	
+	
+	public void eliminarReparacion(Integer codReparacion) throws DataBaseException{
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			ps = conexion.prepareStatement(this.SQL_ELIMINAR_REPARACION);
+			ps.setInt(1, codReparacion);
+			ps.execute();
+			
+		} catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al acceder a los datos de las reparaciones");
+		}
+		
+		finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}		
+	}
+	
+	public ReparacionVO getReparacion(Integer codReparacion) throws DataBaseException
+	{
+
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			StringBuffer sql = new StringBuffer();
+			sql.append("SELECT COD_REPARACION, COD_SOBRE, REPARACION, PRECIO,PRESUPUESTO, NOMBRE_CLIENTE, FECHA_ENTRADA, FECHA_SALIDA, REPARADO, ENTREGADO, facturas.FECHA_FACTURACION, facturas.COD_FACTURA, FACTURADO, ARTICULO FROM reparaciones left join facturas on reparaciones.COD_FACTURA_FK = facturas.COD_FACTURA WHERE COD_REPARACION = ?");
+			
+			ps = conexion.prepareStatement(sql.toString());
+			ps.setInt(1, codReparacion);
+			rs=	ps.executeQuery();
+						
+			if(rs != null)
+			{
+				ReparacionVO reparacion = null;
+				if(rs.next()){
+					reparacion = new ReparacionVO();
+					reparacion.setCodReparacion(rs.getInt("COD_REPARACION"));
+					reparacion.setCodSobre(rs.getString("COD_SOBRE"));
+					reparacion.setNombreCliente(rs.getString("NOMBRE_CLIENTE"));
+					reparacion.setReparacion(rs.getString("REPARACION"));
+					reparacion.setArticulo(rs.getString("ARTICULO"));
+					reparacion.setPrecio(rs.getFloat("PRECIO"));
+					reparacion.setFechaEntrada(rs.getDate("FECHA_ENTRADA"));
+					reparacion.setReparado(rs.getBoolean("REPARADO"));
+					reparacion.setEntregado(rs.getBoolean("ENTREGADO"));
+					reparacion.setFechaSalida(rs.getDate("FECHA_SALIDA"));
+					//reparacion.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setFacturado(rs.getBoolean("FACTURADO"));								
+					reparacion.setPresupuesto(rs.getBoolean("PRESUPUESTO"));					
+					
+					Factura factura = new Factura();
+					factura.setCodFactura(rs.getInt("COD_FACTURA"));					
+					factura.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setFactura(factura);			
+				}
+				
+				if(reparacion == null)
+					return null;
+				else
+					return reparacion;
+				
+					
+			}else{
+				return null;
+			}
+			
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al acceder a los datos de las reparaciones");
+			
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		
+	}
+	
+	
+	public void updateReparacion(ReparacionVO reparacion) throws DataBaseException
+	{
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+						
+			StringBuffer sql = new StringBuffer();
+			
+			int x = 0;
+			boolean separador = false;
+			sql.append("update reparaciones set "); 
+			
+			
+			if (reparacion.getReparacion() != null){
+				sql.append(" REPARACION='").append(reparacion.getReparacion()).append("'");
+				separador = true;
+			}
+			if (reparacion.getCodSobre() != null){
+				sql.append((separador) ? " , " : "").append(" COD_SOBRE= '").append(reparacion.getCodSobre()).append("'");
+				separador = true;
+			}
+			if (reparacion.getArticulo() != null){
+				sql.append((separador) ? " , " : "").append(" ARTICULO= '").append(reparacion.getArticulo()).append("'");
+				separador = true;
+			}
+					
+			if (reparacion.getNombreCliente() != null){
+				sql.append((separador) ? " , " : "").append(" NOMBRE_CLIENTE= '").append(reparacion.getNombreCliente()).append("'");
+				separador = true;
+			}
+			if (reparacion.getPrecio() != null){
+				sql.append((separador) ? " , " : "").append(" PRECIO= ").append(reparacion.getPrecio());
+				separador = true;
+			}
+			if (reparacion.isReparado() != null){
+				sql.append((separador) ? " , " : "").append(" REPARADO= ").append(reparacion.getReparado());
+				separador = true;
+			}
+			if (reparacion.isFacturado() != null){
+				sql.append((separador) ? " , " : "").append(" FACTURADO= ").append(reparacion.getFacturado());
+				separador = true;
+				
+			}
+			if (reparacion.isPresupuestado() != null){
+				sql.append((separador) ? " , " : "").append(" PRESUPUESTO= ").append(reparacion.getPresupuesto());
+				separador = true;
+			}			
+			if (reparacion.isEntregado() != null){
+				sql.append((separador) ? " , " : "").append(" ENTREGADO= ").append(reparacion.getEntregado());
+				separador = true;
+			}
+			
+			if (reparacion.getPresupuesto() != null){
+				sql.append((separador) ? " , " : "").append(" PRESUPUESTO=").append(reparacion.getPresupuesto());
+				separador = true;
+			}
+			
+			log.info("Comprobamos si la reparacion esta facturada.");
+			if (reparacion.isFacturado() != null && reparacion.isFacturado()){
+				log.info("La reparacion esta facturada");
+				Integer codFactura = null;
+				if(reparacion.getFactura().getCodFactura() == null || reparacion.getFactura().getCodFactura().equals(""))
+					codFactura = this.insertFactura(reparacion.getFactura());
+				else{
+					this.updateFactura(reparacion.getFactura());
+					codFactura = reparacion.getFactura().getCodFactura();
+				}
+				sql.append((separador) ? " , " : "").append(" COD_FACTURA_FK = ").append(codFactura);
+			}else{
+				log.info("La reparacion no esta facturada");
+				sql.append((separador) ? " , " : "").append(" COD_FACTURA_FK = null");
+			}
+			
+			sql.append((separador) ? " , " : "").append(" FECHA_ENTRADA= ?");
+			x++;
+			separador = true;
+			
+			sql.append((separador) ? " , " : "").append(" FECHA_SALIDA= ?");
+			x++;
+			separador = true;
+		
+			sql.append( " WHERE COD_REPARACION=").append(reparacion.getCodReparacion());
+			
+			ps = conexion.prepareStatement(sql.toString());
+			
+			int i=0;
+			
+			if (reparacion.getFechaEntrada() != null)
+				ps.setDate(++i, new Date(reparacion.getFechaEntrada().getTime()));
+			else
+				ps.setDate(++i, null);
+				
+			if (reparacion.getFechaSalida() != null)
+				ps.setDate(++i, new Date(reparacion.getFechaSalida().getTime()));
+			else
+				ps.setDate(++i, null);
+			
+			ps.executeUpdate();
+			
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al insertar los datos de la nueva reparacion");
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		
+	}
+	
+	public ArrayList searchReparacionByCriteria(ReparacionCriteria criterio) throws DataBaseException
+	{
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+						
+			StringBuffer sql = new StringBuffer();
+						
+			sql.append("SELECT COD_REPARACION, COD_SOBRE, REPARACION, PRESUPUESTO, PRECIO, NOMBRE_CLIENTE, ").
+				append("FECHA_ENTRADA, FECHA_SALIDA, REPARADO, FACTURADO, ARTICULO, facturas.FECHA_FACTURACION, facturas.COD_FACTURA ").
+				append("FROM reparaciones left join facturas on reparaciones.COD_FACTURA_FK = facturas.COD_FACTURA WHERE COD_JOYERIA_FK = ? ");
+			
+			if (criterio.getArticulo() != null){
+				sql.append(" AND ARTICULO like ? ");
+								
+			}
+			if (criterio.getCodSobr() != null){
+				sql.append(" AND COD_SOBRE = ?");
+							
+			}
+			if (criterio.getEntregado() != null){
+				sql.append(" AND ENTREGADO = ?");
+								
+			}
+			if (criterio.getFacturado() != null){
+				sql.append(" AND FACTURADO = ?");
+								
+			}
+			if (criterio.getFechaEntrada() != null){
+				sql.append(" AND FECHA_ENTRADA > ?");
+								
+			}
+			if (criterio.getFechaFactura() != null){
+				sql.append(" AND FECHA_FACTURA > ?");
+								
+			}
+			if (criterio.getFechaSalida() != null){
+				sql.append(" AND FECHA_SALIDA > ?");
+								
+			}
+			if (criterio.getNombreCliente() != null){
+				sql.append(" AND NOMBRE_CLIENTE like ? ");
+								
+			}
+			if (criterio.getPrecio() != null){
+				sql.append(" AND PRECIO > ?");
+								
+			}
+			if (criterio.getPresupuesto() != null){
+				sql.append(" AND PRESUPUESTO = ?");
+								
+			}
+			if (criterio.getReparado() != null){
+				sql.append(" AND REPARADO = ?");
+								
+			}
+			if (criterio.getReparacion() != null){
+				sql.append(" AND REPARACION like ? ");
+								
+			}
+			
+			ps = conexion.prepareStatement(sql.toString());
+			int i = 1;	
+			
+			ps.setInt(i, criterio.getCodJoyeria());
+			i++;
+			if (criterio.getArticulo() != null){
+				ps.setString(i, "%" + criterio.getArticulo() + "%");
+				i++;
+			}
+			if (criterio.getCodSobr() != null){
+				ps.setString(i, criterio.getCodSobr());
+				i++;				
+			}
+			if (criterio.getEntregado() != null){
+				ps.setBoolean(i, criterio.getEntregado());
+				i++;				
+			}
+			if (criterio.getFacturado() != null){
+				ps.setBoolean(i, criterio.getFacturado());
+				i++;				
+			}
+			if (criterio.getFechaEntrada() != null){
+				ps.setDate(i, new Date(criterio.getFechaEntrada().getTime()));
+				i++;				
+			}
+			if (criterio.getFechaFactura() != null){
+				ps.setDate(i, new Date(criterio.getFechaFactura().getTime()));
+				i++;				
+			}
+			if (criterio.getFechaSalida() != null){
+				ps.setDate(i, new Date(criterio.getFechaSalida().getTime()));
+				i++;				
+			}
+			if (criterio.getNombreCliente() != null){
+				ps.setString(i, "%" +  criterio.getNombreCliente() + "%");
+				i++;				
+			}
+			if (criterio.getPrecio() != null){
+				ps.setFloat(i, criterio.getPrecio());
+				i++;				
+			}
+			if (criterio.getPresupuesto() != null){
+				ps.setBoolean(i, criterio.getPresupuesto());
+				i++;				
+			}
+			if (criterio.getReparado() != null){
+				ps.setBoolean(i, criterio.getReparado());
+				i++;				
+			}
+			if (criterio.getReparacion() != null){
+				ps.setString(i, "%" + criterio.getReparacion() + "%");
+				i++;				
+			}
+			
+			log.info(sql);
+			
+			rs = ps.executeQuery();
+			
+			if(rs != null)
+			{
+				ArrayList<ReparacionVO> listaReparaciones = new ArrayList<ReparacionVO>();
+				while(rs.next()){
+					ReparacionVO reparacion = new ReparacionVO();
+					reparacion.setCodReparacion(rs.getInt("COD_REPARACION"));
+					reparacion.setCodSobre(rs.getString("COD_SOBRE"));
+					reparacion.setReparacion(rs.getString("REPARACION"));
+					reparacion.setPrecio(rs.getFloat("PRECIO"));
+					reparacion.setNombreCliente(rs.getString("NOMBRE_CLIENTE"));
+					reparacion.setFechaEntrada(rs.getDate("FECHA_ENTRADA"));
+					reparacion.setFechaSalida(rs.getDate("FECHA_SALIDA"));
+					reparacion.setReparado(rs.getBoolean("REPARADO"));
+					reparacion.setFacturado(rs.getBoolean("FACTURADO"));
+					reparacion.setArticulo(rs.getString("ARTICULO"));
+					//reparacion.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setPresupuesto(rs.getBoolean("PRESUPUESTO"));
+					
+					Factura factura = new Factura();
+					factura.setCodFactura(rs.getInt("COD_FACTURA"));					
+					factura.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setFactura(factura);		
+					
+					listaReparaciones.add(reparacion);
+					
+				}
+				if(listaReparaciones.size() == 0)
+					return null;
+				else
+					return listaReparaciones;
+				
+					
+			}else{
+				return null;
+			}
+			
+				
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al realizar la busqueda");
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		
+	}
+	
+	public List listadoReparaciones(Integer[] codReparacion) throws DataBaseException
+	{
+
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			StringBuffer sql = new StringBuffer();
+			sql.append("SELECT COD_REPARACION, COD_SOBRE, REPARACION, PRESUPUESTO, PRECIO, NOMBRE_CLIENTE, FECHA_ENTRADA, FECHA_SALIDA, REPARADO, FACTURADO, ARTICULO, facturas.FECHA_FACTURACION, facturas.COD_FACTURA FROM reparaciones left join facturas on reparaciones.COD_FACTURA_FK = facturas.COD_FACTURA "). 
+				append(" WHERE (");
+			
+			boolean separador = false;
+			for (int i= 0; i < codReparacion.length; i++){
+				if (separador)
+					sql.append(" OR ");
+				sql.append("COD_REPARACION = ?");
+				separador = true;
+				
+			}				
+			
+			ps = conexion.prepareStatement(sql.toString());
+			log.info(sql.toString());
+			for (int i= 0; i < codReparacion.length; i++){
+				ps.setInt(i+1, codReparacion[i]);
+				
+			}
+			
+			rs=	ps.executeQuery();
+						
+			if(rs != null)
+			{
+				List<ReparacionVO> listaReparaciones = new ArrayList<ReparacionVO>();
+				while(rs.next()){
+					ReparacionVO reparacion = new ReparacionVO();
+					reparacion.setCodReparacion(rs.getInt("COD_REPARACION"));
+					reparacion.setCodSobre(rs.getString("COD_SOBRE"));
+					reparacion.setReparacion(rs.getString("REPARACION"));
+					reparacion.setPrecio(rs.getFloat("PRECIO"));
+					reparacion.setNombreCliente(rs.getString("NOMBRE_CLIENTE"));
+					reparacion.setFechaEntrada(rs.getDate("FECHA_ENTRADA"));
+					reparacion.setFechaSalida(rs.getDate("FECHA_SALIDA"));
+					reparacion.setReparado(rs.getBoolean("REPARADO"));
+					reparacion.setFacturado(rs.getBoolean("FACTURADO"));
+					reparacion.setArticulo(rs.getString("ARTICULO"));
+					reparacion.setPresupuesto(rs.getBoolean("PRESUPUESTO"));
+					
+					Factura factura = new Factura();
+					factura.setCodFactura(rs.getInt("COD_FACTURA"));					
+					factura.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setFactura(factura);					
+					
+					listaReparaciones.add(reparacion);
+					
+				}
+				if(listaReparaciones.size() == 0)
+					return null;
+				else
+					return listaReparaciones;
+				
+					
+			}else{
+				return null;
+			}
+			
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al acceder a los datos de las reparaciones");
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		
+	}
+	
+	public Integer insertFactura(Factura factura) throws DataBaseException{
+		try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			StringBuffer sql = new StringBuffer();
+			sql.append("INSERT INTO  facturas (COD_FACTURA, FECHA_FACTURACION) values(?, ?)"); 
+			log.error(sql);
+			
+			factura.setCodFactura(this.ultimoCodigoFactura());
+			
+			ps = conexion.prepareStatement(sql.toString());
+			ps.setInt(1, factura.getCodFactura());
+			ps.setDate(2, new Date(factura.getFechaFactura().getTime()));
+			
+			log.info("Ultimo codigo de factura: " + factura.getCodFactura());
+			
+			ps.execute();
+						
+			
+			
+		}catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("insertFactura(): Error al acceder a los datos de las reparaciones");
+
+		} catch (DataBaseException e) {
+			// TODO Auto-generated catch block
+			log.error(e);
+		}finally{
+	
+		}
+		return factura.getCodFactura();
+
+	}
+	
+	
+	public void updateFactura(Factura factura){
+		
+	}
+	
+	
+	public Integer ultimoCodigoFactura() throws DataBaseException{
+		try {
+			Integer codigoMax;
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			ps = conexion.prepareStatement("Select max(COD_FACTURA) as codigo from facturas");
+			rs = ps.executeQuery();
+			
+			if(rs.next())
+				codigoMax = rs.getInt("codigo") + 1;
+			else
+				codigoMax = 1;
+			return codigoMax; 
+			
+		} catch (SQLException e) {
+			log.error(e);
+			throw new DataBaseException("Error al acceder a los datos de las facturas");
+		}
+		
+		finally{
+			
+		}		
+	}
+	
+	
+	public void facturar(Integer[] codReparaciones){
+		/*try {
+			conexion =	(Connection) DriverManager.getConnection(URL, USER, PASSWORD);
+			/*
+			StringBuffer sql = new StringBuffer();
+			sql.append("SELECT COD_REPARACION, COD_SOBRE, REPARACION, PRESUPUESTO, PRECIO, NOMBRE_CLIENTE, FECHA_ENTRADA, FECHA_SALIDA, REPARADO, FACTURADO, ARTICULO, facturas.FECHA_FACTURACION, facturas.COD_FACTURA FROM reparaciones left join facturas on reparaciones.COD_FACTURA_FK = facturas.COD_FACTURA "). 
+				append(" WHERE (");
+			
+			boolean separador = false;
+			for (int i= 0; i < codReparacion.length; i++){
+				if (separador)
+					sql.append(" OR ");
+				sql.append("COD_REPARACION = ?");
+				separador = true;
+				
+			}				
+			
+			ps = conexion.prepareStatement(sql.toString());
+			System.out.println(sql.toString());
+			for (int i= 0; i < codReparacion.length; i++){
+				ps.setInt(i+1, codReparacion[i]);
+				
+			}
+			
+			rs=	ps.executeQuery();
+						
+			if(rs != null)
+			{
+				List<ReparacionVO> listaReparaciones = new ArrayList<ReparacionVO>();
+				while(rs.next()){
+					ReparacionVO reparacion = new ReparacionVO();
+					reparacion.setCodReparacion(rs.getInt("COD_REPARACION"));
+					reparacion.setCodSobre(rs.getString("COD_SOBRE"));
+					reparacion.setReparacion(rs.getString("REPARACION"));
+					reparacion.setPrecio(rs.getFloat("PRECIO"));
+					reparacion.setNombreCliente(rs.getString("NOMBRE_CLIENTE"));
+					reparacion.setFechaEntrada(rs.getDate("FECHA_ENTRADA"));
+					reparacion.setFechaSalida(rs.getDate("FECHA_SALIDA"));
+					reparacion.setReparado(rs.getBoolean("REPARADO"));
+					reparacion.setFacturado(rs.getBoolean("FACTURADO"));
+					reparacion.setArticulo(rs.getString("ARTICULO"));
+					reparacion.setPresupuesto(rs.getBoolean("PRESUPUESTO"));
+					
+					Factura factura = new Factura();
+					factura.setCodFactura(rs.getInt("COD_FACTURA"));					
+					factura.setFechaFactura(rs.getDate("FECHA_FACTURACION"));
+					reparacion.setFactura(factura);					
+					
+					listaReparaciones.add(reparacion);
+					
+				}
+				if(listaReparaciones.size() == 0)
+					return null;
+				else
+					return listaReparaciones;
+				
+					
+			}else{
+				return null;
+			}
+			
+		}catch (SQLException e) {
+			e.printStackTrace();
+			throw new DataBaseException("Error al acceder a los datos de las reparaciones");
+
+		}finally{
+			try {
+				conexion.close();
+			}catch (SQLException e) {
+
+			}
+		}
+		*/
+	}
+	
+}
